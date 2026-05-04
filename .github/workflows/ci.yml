@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -23,27 +26,30 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: "20"
           cache: npm
 
       - run: npm ci
 
-      # user.github.io → base / ; 그 외 프로젝트 페이지 → /repo/
+      # 사용자/조직 페이지(*.github.io)는 루트(/), 저장소 Pages는 /<repo>/ (package.json 스크립트: vite build)
       - name: Build
         env:
           REPO_NAME: ${{ github.event.repository.name }}
         run: |
           if [[ "$REPO_NAME" == *.github.io ]]; then
-            npx tsc -b && npx vite build
+            npm run build
           else
-            npx tsc -b && npx vite build --base="/${REPO_NAME}/"
+            npm run build -- --base="/${REPO_NAME}/"
           fi
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Upload Pages artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
   deploy:
+    if: github.event_name == 'push'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
