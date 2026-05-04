@@ -2,9 +2,18 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -12,14 +21,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
 
+      # user.github.io → base / ; 그 외 프로젝트 페이지 → /repo/
       - name: Build
-        run: npm run build
+        env:
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          if [[ "$REPO_NAME" == *.github.io ]]; then
+            npx tsc -b && npx vite build
+          else
+            npx tsc -b && npx vite build --base="/${REPO_NAME}/"
+          fi
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
